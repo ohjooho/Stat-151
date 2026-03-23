@@ -1,0 +1,231 @@
+---
+title: "final project"
+author: "Chengming Luo"
+date: "2023-05-07"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r, echo=F, message=FALSE, warning=FALSE}
+library(glmnet)
+library(MASS)
+```
+
+In this section, we want to answer one question -- which feature we should put into our GLM model in order to minimize the mean square error of our prediction? While Jerry uses LASSO/Ridge Regression to apply penalties to models with redundant features, Alex will use Forward/Backward selection to select a pseudo-optimal model that would hopefully minimize the mean square error without going through the MSE of every single possible model.
+
+In this section, we will randomly split the data into a training set and a testing set. Firstly, we will use the training data to find the pseudo-optimal model using forward selection with AIC, backward selection with AIC, forward selection with BIC, backward selection with BIC. Then, we will compare the cross validation mean square error of the four models' prediction. The model with the lowest MSE should be the best model out of the four. And finally, we will make sure that the model is the best by giving four different sets of predictions on the testing data using the four different models, and comparing their the MSE of the four sets of predictions. The four different models are shown in the tables below.
+
+In the end, the forward selection with BIC gives a 11-feature model with the lowest cross-validation MSE while the two AIC models give the lowest testing MSE. However, the nature of forward/backward selection decides that maybe none of the three models is the actual optimal model. Also, the difference of the MSEs of the four models is very trivial. Some of the remaining features of all three models are macro-economic features, including euribor3m, cons.price.idx, emp.var.rate. This makes sense because the interest rate, inflation rate, and employment rate are highly correlated with the market demand of bank savings by nature. The demographic profile of the potential customer does not seem to matter that much in the BIC models since age, job, marital status, and education level are not included in the two BIC models, while the AIC models kept some demographic variables. The most important demographic status is whether or not the customer has defaulted in the past. The marketing effort does matter since duration of the marketing call and the contact communication type can influence the success rate. However, we have to note that "duration" should only be included for benchmark purposes and should be discarded if the intention is to have a realistic predictive model. Customer loyalty also seems to play a role in the success rate of the marketing campaign since poutcome is in the model and thus, the success/failure of the last marketing campaign can influence the success rate of future campaign. The most surprising result is that the month of the year is important in determining the success rate. However, this might be due to the fact that this data is collected during the 2008-2010 financial crisis, and there might be several months in those three years that have particularly bad macro-economics conditions. Maybe customers in those months with "bad economies" might resort to or stay away from bank savings. This is worth further investigating in future researching.
+
+```{r}
+train = read.csv("bank-data-train.csv")
+test = read.csv("bank-data-test.csv")
+```
+
+```{r}
+train = subset(train, select=-c(y, id, X))
+test = subset(test, select=-c(y, id, X))
+```
+
+```{r}
+train.glm = glm(y_boolean ~ ., family = "binomial", data = train)
+summary(train.glm)
+```
+
+```{r}
+rmse_train_glm = sqrt(mean((train.glm$fitted.values-train$y_boolean)^2))
+rmse_train_glm # RMSE of the full GLM model with training data
+```
+
+```{r}
+intercept_model = glm(y_boolean ~ 1, family = "binomial", data = train)
+summary(intercept_model)
+```
+
+```{r}
+forwardAIC_model = step(intercept_model,
+                        scope = list(lower=intercept_model, upper=train.glm),
+                        direction="forward",
+                        k=2,
+                        trace=FALSE)
+```
+
+```{r}
+summary(forwardAIC_model)
+```
+
+```{r}
+backwardAIC_model = step(train.glm,
+                        scope = list(lower=intercept_model, upper=train.glm),
+                        direction="backward",
+                        k=2,
+                        trace=FALSE)
+```
+
+```{r}
+summary(backwardAIC_model)
+```
+
+```{r}
+forwardBIC_model = step(intercept_model,
+                        scope = list(lower=intercept_model, upper=train.glm),
+                        direction="forward",
+                        k=log(dim(train)[1]),
+                        trace=FALSE)
+```
+
+```{r}
+summary(forwardBIC_model)
+```
+
+```{r}
+backwardBIC_model = step(train.glm,
+                        scope = list(lower=intercept_model, upper=train.glm),
+                        direction="backward",
+                        k=log(dim(train)[1]),
+                        trace=FALSE)
+```
+
+```{r}
+summary(backwardBIC_model)
+```
+
+```{r}
+kfoldvalidation = function(vars,data) {
+  indices = sample(1:nrow(data),nrow(data),replace=FALSE)
+  resamp_data = data[indices,vars]
+  mse = rep(0,5)
+  for (i in 0:4){
+    val_data = resamp_data[(i/5*nrow(data) + 1):((i+1)/5*nrow(data)),]
+    train_data = resamp_data[-((i/5*nrow(data) + 1):((i+1)/5*nrow(data))),]
+    print(dim(val_data))
+    print(dim(train_data))
+    model = glm(y_boolean ~ ., family = "binomial", data=train_data)
+    preds = predict(model,new_data=val_data, type="response")
+    mse[i+1] = mean((val_data$y_boolean - preds)^2)
+  }
+  return(mse)
+}
+```
+
+```{r}
+faic_vars = c("duration", "nr.employed", "month", "poutcome", 
+    "emp.var.rate", "cons.price.idx", "contact", "cons.conf.idx", 
+    "default", "pdays", "day_of_week", "campaign", "job", "euribor3m", 
+    "previous", "y_boolean")
+baic_vars = c("job", "default", "contact", "month", "day_of_week", 
+    "duration", "campaign", "pdays", "previous", "poutcome", "emp.var.rate", 
+    "cons.price.idx", "cons.conf.idx", "euribor3m", "nr.employed", "y_boolean")
+fbic_vars = c("duration", "nr.employed", "month", "poutcome", 
+    "emp.var.rate", "cons.price.idx", "contact", "cons.conf.idx", 
+    "pdays", "default", "y_boolean")
+bbic_vars = c("default", "contact", "month", "duration", 
+    "pdays", "poutcome", "emp.var.rate", "cons.price.idx", "euribor3m", "y_boolean")
+```
+
+```{r}
+set.seed(c(1, 10, 100, 1000, 10000, 0))
+```
+
+```{r, message=FALSE, warning=FALSE}
+faic_mse = mean(kfoldvalidation(faic_vars,train))
+```
+
+```{r,message=FALSE, warning=FALSE}
+baic_mse = mean(kfoldvalidation(baic_vars,train))
+```
+
+```{r,message=FALSE, warning=FALSE}
+fbic_mse = mean(kfoldvalidation(fbic_vars,train))
+```
+
+```{r,message=FALSE, warning=FALSE}
+bbic_mse = mean(kfoldvalidation(bbic_vars,train))
+```
+
+```{r}
+print(paste0("Forward AIC 5-fold MSE: ", faic_mse))
+```
+
+```{r}
+print(paste0("Backward AIC 5-fold MSE: ", baic_mse))
+```
+
+```{r}
+print(paste0("Forward BIC 5-fold MSE: ", fbic_mse))
+```
+
+```{r}
+print(paste0("Backward BIC 5-fold MSE: ", bbic_mse))
+```
+
+```{r}
+test.glm = glm(y_boolean~., family = "binomial", data = train)
+```
+
+```{r}
+faic.glm = glm(formula = y_boolean ~ duration + nr.employed + month + poutcome + 
+    emp.var.rate + cons.price.idx + contact + cons.conf.idx + 
+    default + pdays + day_of_week + campaign + job + euribor3m + 
+    previous, family = "binomial", data = train)
+```
+
+```{r}
+baic.glm = glm(formula = y_boolean ~ job + default + contact + month + day_of_week + 
+    duration + campaign + pdays + previous + poutcome + emp.var.rate + 
+    cons.price.idx + cons.conf.idx + euribor3m + nr.employed, 
+    family = "binomial", data = train)
+```
+
+```{r}
+fbic.glm = glm(formula = y_boolean ~ duration + nr.employed + month + poutcome + 
+    emp.var.rate + cons.price.idx + contact + cons.conf.idx + 
+    pdays + default, family = "binomial", data = train)
+```
+
+```{r}
+bbic.glm = glm(formula = y_boolean ~ default + contact + month + duration + 
+    pdays + poutcome + emp.var.rate + cons.price.idx + euribor3m, 
+    family = "binomial", data = train)
+```
+
+```{r}
+faic.pred = predict(faic.glm, test, type="response")
+faic.mse.test = mean((test$y_boolean - faic.pred)^2)
+```
+
+```{r}
+baic.pred = predict(baic.glm, test, type="response")
+baic.mse.test = mean((test$y_boolean - baic.pred)^2)
+```
+
+```{r}
+fbic.pred = predict(fbic.glm, test, type="response")
+fbic.mse.test = mean((test$y_boolean - fbic.pred)^2)
+```
+
+```{r}
+bbic.pred = predict(bbic.glm, test, type="response")
+bbic.mse.test = mean((test$y_boolean - bbic.pred)^2)
+```
+
+```{r}
+print(paste0("Forward AIC testing MSE: ", faic.mse.test))
+```
+
+```{r}
+print(paste0("Backward AIC testing MSE: ", baic.mse.test))
+```
+
+```{r}
+print(paste0("Forward BIC testing MSE: ", fbic.mse.test))
+```
+
+```{r}
+print(paste0("Backward BIC testing MSE: ", bbic.mse.test))
+```
+
+```{r}
+summary(bbic.glm)
+```

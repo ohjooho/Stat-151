@@ -1,0 +1,138 @@
+---
+title: "final_proj_eda"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(warn=-1)
+```
+
+```{r}
+bank_data = read.csv2("bank-additional/bank-additional-full.csv")
+head(bank_data)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(glmnet)
+```
+```{r}
+bank_data$y = bank_data$y == "yes"
+```
+
+
+```{r}
+#make this example reproducible
+set.seed(1)
+
+#create ID column
+bank_data$id <- 1:nrow(bank_data)
+
+#use 70% of dataset as training set and 30% as test set 
+train <- bank_data %>% dplyr::sample_frac(0.70)
+test  <- dplyr::anti_join(bank_data, train, by = 'id')
+```
+
+```{r}
+train$emp.var.rate = as.numeric(train$emp.var.rate)
+train$cons.price.idx = as.numeric(train$cons.price.idx)
+train$cons.conf.idx = as.numeric(train$cons.conf.idx)
+train$euribor3m = as.numeric(train$euribor3m)
+train$nr.employed = as.numeric(train$nr.employed)
+train = subset(train, select=-c(id))
+```
+
+```{r}
+test$emp.var.rate = as.numeric(test$emp.var.rate)
+test$cons.price.idx = as.numeric(test$cons.price.idx)
+test$cons.conf.idx = as.numeric(test$cons.conf.idx)
+test$euribor3m = as.numeric(test$euribor3m)
+test$nr.employed = as.numeric(test$nr.employed)
+test = subset(test, select=-c(id))
+```
+
+```{r}
+set.seed(1)
+n <- 100
+x <- matrix(rnorm(n*20), n, 20)
+y <- rnorm(n)
+
+## Standardize variables: (need to use n instead of (n-1) as denominator)
+mysd <- function(z) sqrt(sum((z-mean(z))^2)/length(z))
+sx <- scale(x, scale = apply(x, 2, mysd))
+sx <- as.matrix(sx, ncol = 20, nrow = 100)
+
+## Calculate lambda path (first get lambda_max):
+lambda_max <- max(abs(colSums(sx*y)))/n
+epsilon <- .0001
+K <- 100
+lambdapath <- round(exp(seq(log(lambda_max), log(lambda_max*epsilon), 
+                            length.out = K)), digits = 10)
+lambdapath
+```
+
+```{r}
+train_x = train %>% select(-c(y))
+```
+
+
+```{r}
+nFolds <- 10
+foldid <- sample(rep(seq(nFolds), length.out = nrow(train_x)))
+```
+
+
+# 3 models without normalization
+
+```{r}
+raw_glm = glmnet(x=data.matrix(subset(train, select=-c(y))), y=train$y, family = "binomial", nfolds = nFolds,foldid = foldid, standardize = FALSE, lambda = lambdapath)
+raw_y_pred = predict(raw_glm, newx=data.matrix(subset(test, select=-c(y))), type="response")
+```
+
+```{r}
+print(paste0("the unregularized MSE is: ", mean((test$y - raw_y_pred)^2)))
+print(paste0("the unregularized accuracy is: ", sum(test$y == (raw_y_pred> 0.5)) / length(raw_y_pred)))
+```
+```{r}
+coef(glm(y~., family="binomial", data=train))
+```
+
+
+# Ridge Regression
+
+```{r}
+ridge_glm = cv.glmnet(x=data.matrix(train_x), y=train$y, family = binomial, alpha=0, nfolds = nFolds,foldid = foldid, standardize = FALSE, lambda = lambdapath)
+ridge_y_pred = predict(ridge_glm, s=ridge_glm$lambda.min, newx=data.matrix(test %>% select(-c(y))), type="response")
+plot(ridge_glm)
+```
+
+```{r}
+print(paste0("the ridge regression MSE is: ", mean((test$y - ridge_y_pred)^2)))
+print(paste0("the ridge regression accuracy is: ", sum(test$y == (ridge_y_pred> 0.5)) / length(ridge_y_pred)))
+```
+
+```{r}
+coef(ridge_glm, s=ridge_glm$lambda.min)
+```
+
+
+# LASSO Regression
+
+```{r}
+lasso_glm = cv.glmnet(x=data.matrix(train_x), y=train$y, family = binomial, alpha=1, nfolds = nFolds,foldid = foldid, standardize = FALSE, lambda = lambdapath)
+lasso_y_pred = predict(lasso_glm, s=lasso_glm$lambda.min, newx=data.matrix(test %>% select(-c(y))), type="response")
+plot(lasso_glm)
+```
+
+```{r}
+print(paste0("the lasso regression MSE is: ", mean((test$y - lasso_y_pred)^2)))
+print(paste0("the lasso regression accuracy is: ", sum(test$y == (lasso_y_pred> 0.5)) / length(lasso_y_pred)))
+```
+
+```{r}
+coef(lasso_glm, s=lasso_glm$lambda.1se)
+```
+
+

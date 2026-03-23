@@ -1,0 +1,31 @@
+---
+title: "final_Jooho"
+author: "Jooho Oh"
+date: "5/8/2023"
+output: html_document
+---
+
+```{r}
+# Load the bank marketing dataset
+bank_data <- read.csv("~/Desktop/151 final proj/bank-additional-full.csv", sep=";")
+
+# Convert the response variable y to a binary numeric variable
+bank_data$y_binary <- ifelse(bank_data$y == "yes", 1, 0)
+
+#anova model
+anova_model <- aov(y_binary ~ ., data = bank_data)
+
+summary(anova_model)
+```
+
+  The ANOVA results are shown in the table above. The ANOVA table shows the results of testing the significance of each variable in the model, including age, job, marital status, education, default, housing, loan, contact, month, day of week, duration, campaign, pdays, previous, poutcome, emp.var.rate, cons.price.idx, cons.conf.idx, euribor3m, nr.employed, and the response variable y. Each row represents an independent variable, with columns showing the degrees of freedom (Df), the sum of squares (Sum Sq), the mean sum of squares (Mean Sq), the F-value, and the p-value (Pr(>F)).
+
+  We can see that all independent variables, except for 'nr.employed' and 'loan', have extremely low p-values (less than 2e-16), indicating that they have a significant relationship with the response variable 'y_binary'. This suggests that these variables may be important predictors of the success of a marketing campaign.
+
+  Furthermore, the F-values for each variable are extremely large, indicating a large amount of variance in the response variable that can be explained by each independent variable. For example, the variable 'duration' has an F-value of 7.139e+33, indicating that it explains a large amount of the variance in 'y_binary'. It should be noted that including the feature 'duration' in the model may only serve as a benchmark for comparison, and it may not be appropriate to include it in a realistic predictive model.
+
+  Overall, this ANOVA analysis suggests that there are several independent variables in the bank marketing dataset that are significantly related to the success of a marketing campaign. These variables include age, job, marital status, education, default, housing, contact, month, day of week, duration, campaign, pdays, previous, poutcome, emp.var.rate, cons.price.idx, cons.conf.idx, and euribor3m.
+
+  It is important to note that these variables may be correlated with each other, which could impact the results of any predictive model. Further analysis, such as correlation analysis or regression analysis, could be performed to investigate these relationships in more detail.
+
+  In conclusion, this ANOVA analysis of the bank marketing dataset has identified several independent variables that are significantly related to the success of a marketing campaign. These variables should be considered when developing a predictive model for marketing campaign success. However, it is important to be mindful of potential correlations between these variables and to perform further analysis to investigate these relationships.
